@@ -108,10 +108,22 @@
         octx.drawImage(img, 0, 0);
         const id = octx.getImageData(0, 0, w, h);
         const d = id.data;
-        for (let i = 0; i < d.length; i += 4) {
-          const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-          if (lum < 42) d[i + 3] = 0;                       // dark bg -> clear
-          else if (lum < 82) d[i + 3] = ((lum - 42) / 40) * 255; // soft edge
+        // Radial feather: opaque in the centre (the creature), fading to
+        // transparent toward the edges so the rectangular frame and any pale
+        // background melt into the maze's darkness — a creature out of the mist.
+        const cx = w / 2, cy = h / 2;
+        const rInner = Math.min(w, h) * 0.30;
+        const rOuter = Math.min(w, h) * 0.52;
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const dx = x - cx, dy = y - cy;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            let a = 1;
+            if (dist > rInner) a = 1 - (dist - rInner) / (rOuter - rInner);
+            if (a < 0) a = 0; else if (a > 1) a = 1;
+            const idx = (y * w + x) * 4 + 3;
+            d[idx] = d[idx] * a;
+          }
         }
         octx.putImageData(id, 0, 0);
         monsterImg = off;
