@@ -24,6 +24,69 @@
   // Facing: 0=E,1=S,2=W,3=N — matches MazeCore.DIRVEC.
   const FACE_ANGLE = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
 
+  // --- Textured renderer settings ---
+  const TEX = 64;                 // texture size (px)
+  const FOG = 13;                 // distance (grid units) at which fog fully closes
+  const FOGR = 6, FOGG = 7, FOGB = 15; // fog / atmosphere colour
+  let frameImg = null, frameData = null; // reused ImageData buffer
+  const zbuf = new Float64Array(RW);
+
+  // Procedural brick wall texture (running-bond bricks + mortar + shading).
+  function makeWallTexture() {
+    const t = new Uint8Array(TEX * TEX * 3);
+    for (let y = 0; y < TEX; y++) {
+      for (let x = 0; x < TEX; x++) {
+        const row = Math.floor(y / 16);
+        const off = (row % 2) * 16;      // offset alternate rows
+        const bx = (x + off) % 32;       // brick 32 wide
+        const by = y % 16;               // brick 16 tall
+        let r, g, b;
+        if (by < 2 || bx < 2) { r = 58; g = 56; b = 64; } // mortar
+        else {
+          const n = ((x * 13 + y * 7) % 17) - 8;          // grain noise
+          const v = (by / 16) * 14;                       // top-lit gradient
+          r = 134 + n - v; g = 62 + (n >> 1) - v; b = 52 + (n >> 1) - v;
+        }
+        const i = (y * TEX + x) * 3; t[i] = r; t[i + 1] = g; t[i + 2] = b;
+      }
+    }
+    return t;
+  }
+
+  // Procedural stone-tile floor (checkerboard tiles with grout lines).
+  function makeFloorTexture() {
+    const t = new Uint8Array(TEX * TEX * 3);
+    for (let y = 0; y < TEX; y++) {
+      for (let x = 0; x < TEX; x++) {
+        const tile = (Math.floor(x / 32) + Math.floor(y / 32)) % 2;
+        const gx = x % 32, gy = y % 32;
+        const n = ((x * 7 + y * 11) % 13) - 6;
+        const v = (tile ? 60 : 78) + n;
+        let r = v, g = v * 0.97, b = v * 0.88;
+        if (gx < 2 || gy < 2) { r = 36; g = 36; b = 42; } // grout
+        const i = (y * TEX + x) * 3; t[i] = r; t[i + 1] = g; t[i + 2] = b;
+      }
+    }
+    return t;
+  }
+
+  // Dark stone ceiling.
+  function makeCeilTexture() {
+    const t = new Uint8Array(TEX * TEX * 3);
+    for (let y = 0; y < TEX; y++) {
+      for (let x = 0; x < TEX; x++) {
+        const n = ((x * 5 + y * 9) % 11) - 5;
+        const v = 24 + n;
+        const i = (y * TEX + x) * 3; t[i] = v; t[i + 1] = v; t[i + 2] = v + 7;
+      }
+    }
+    return t;
+  }
+
+  const wallTex = makeWallTexture();
+  const floorTex = makeFloorTexture();
+  const ceilTex = makeCeilTexture();
+
   const el = {
     difficulty: document.getElementById('difficulty'),
     restart: document.getElementById('restart'),
@@ -279,79 +342,133 @@
 
   function draw() {
     if (!ctx) return; // e.g. jsdom without a canvas backend — logic still runs
-    // Ceiling and floor.
-    const ceil = ctx.createLinearGradient(0, 0, 0, RH / 2);
-    ceil.addColorStop(0, '#0a0d20');
-    ceil.addColorStop(1, '#1a1f3f');
-    ctx.fillStyle = ceil;
-    ctx.fillRect(0, 0, RW, RH / 2);
-    const floor = ctx.createLinearGradient(0, RH / 2, 0, RH);
-    floor.addColorStop(0, '#15122a');
-    floor.addColorStop(1, '#070812');
-    ctx.fillStyle = floor;
-    ctx.fillRect(0, RH / 2, RW, RH / 2);
+    if (!frameData) { frameImg = ctx.createImageData(RW, RH); frameData = frameImg.data; }
+    const data = frameData;
 
     const dirX = Math.cos(cam.angle);
     const dirY = Math.sin(cam.angle);
     const planeX = -dirY * FOV;
     const planeY = dirX * FOV;
+    const halfH = RH / 2;
+    const h2 = Math.floor(halfH);
+    const posZ = halfH; // camera height => walls meet the floor seamlessly
     const gCx = 2 * maze.goal.x + 1;
     const gCy = 2 * maze.goal.y + 1;
-    const zBuffer = new Float64Array(RW);
+    const zBuffer = zbuf;
 
+    // ---- Floor & ceiling casting (perspective-correct, textured) ----
+    const rayX0 = dirX - planeX, rayY0 = dirY - planeY; // leftmost ray
+    const rayX1 = dirX + planeX, rayY1 = dirY + planeY; // rightmost ray
+    for (let y = h2 + 1; y < RH; y++) {
+      const rowDist = posZ / (y - halfH);
+      const stepX = rowDist * (rayX1 - rayX0) / RW;
+      const stepY = rowDist * (rayY1 - rayY0) / RW;
+      let fx = cam.px + rowDist * rayX0;
+      let fy = cam.py + rowDist * rayY0;
+      let f = rowDist / FOG; if (f > 1) f = 1; f *= f;
+      const floorRow = y * RW * 4;
+      const ceilRow = (RH - 1 - y) * RW * 4;
+      for (let x = 0; x < RW; x++) {
+        const tx = (((fx - Math.floor(fx)) * TEX) | 0) & (TEX - 1);
+        const ty = (((fy - Math.floor(fy)) * TEX) | 0) & (TEX - 1);
+        fx += stepX; fy += stepY;
+        const ti = (ty * TEX + tx) * 3;
+        let idx = floorRow + x * 4;
+        data[idx] = floorTex[ti] + (FOGR - floorTex[ti]) * f;
+        data[idx + 1] = floorTex[ti + 1] + (FOGG - floorTex[ti + 1]) * f;
+        data[idx + 2] = floorTex[ti + 2] + (FOGB - floorTex[ti + 2]) * f;
+        data[idx + 3] = 255;
+        idx = ceilRow + x * 4;
+        data[idx] = ceilTex[ti] + (FOGR - ceilTex[ti]) * f;
+        data[idx + 1] = ceilTex[ti + 1] + (FOGG - ceilTex[ti + 1]) * f;
+        data[idx + 2] = ceilTex[ti + 2] + (FOGB - ceilTex[ti + 2]) * f;
+        data[idx + 3] = 255;
+      }
+    }
+    // Fill the 2-pixel horizon seam with fog so it never shows garbage.
+    for (let y = h2 - 1; y <= h2; y++) {
+      const row = y * RW * 4;
+      for (let x = 0; x < RW; x++) {
+        const idx = row + x * 4;
+        data[idx] = FOGR; data[idx + 1] = FOGG; data[idx + 2] = FOGB; data[idx + 3] = 255;
+      }
+    }
+
+    // ---- Textured walls ----
     for (let col = 0; col < RW; col++) {
       const cameraX = (2 * col) / RW - 1;
       const rayX = dirX + planeX * cameraX;
       const rayY = dirY + planeY * cameraX;
-
-      let mapX = Math.floor(cam.px);
-      let mapY = Math.floor(cam.py);
+      let mapX = Math.floor(cam.px), mapY = Math.floor(cam.py);
       const deltaX = rayX === 0 ? 1e30 : Math.abs(1 / rayX);
       const deltaY = rayY === 0 ? 1e30 : Math.abs(1 / rayY);
-
       let stepX, stepY, sideX, sideY;
       if (rayX < 0) { stepX = -1; sideX = (cam.px - mapX) * deltaX; }
       else { stepX = 1; sideX = (mapX + 1 - cam.px) * deltaX; }
       if (rayY < 0) { stepY = -1; sideY = (cam.py - mapY) * deltaY; }
       else { stepY = 1; sideY = (mapY + 1 - cam.py) * deltaY; }
 
-      let side = 0;
-      let guard = 0;
-      while (guard++ < 512) {
+      let side = 0, guard = 0;
+      while (guard++ < 1024) {
         if (sideX < sideY) { sideX += deltaX; mapX += stepX; side = 0; }
         else { sideY += deltaY; mapY += stepY; side = 1; }
         if (mapY < 0 || mapY >= maze.gh || mapX < 0 || mapX >= maze.gw) break;
         if (maze.grid[mapY][mapX] === 1) break;
       }
 
-      const perp = side === 0 ? (sideX - deltaX) : (sideY - deltaY);
-      const dist = Math.max(perp, 0.0001);
-      let lineH = Math.floor(RH / dist);
-      if (lineH > RH * 4) lineH = RH * 4;
-      let drawStart = Math.floor(-lineH / 2 + RH / 2);
-      let drawEnd = Math.floor(lineH / 2 + RH / 2);
-      if (drawStart < 0) drawStart = 0;
-      if (drawEnd > RH) drawEnd = RH;
+      const perp = Math.max(side === 0 ? (sideX - deltaX) : (sideY - deltaY), 0.0001);
+      zBuffer[col] = perp;
+      const lineH = RH / perp;
+      const drawStart = Math.floor(-lineH / 2 + halfH);
+      const drawEnd = Math.floor(lineH / 2 + halfH);
+      const ds = drawStart < 0 ? 0 : drawStart;
+      const de = drawEnd > RH ? RH : drawEnd;
 
-      // Is this wall part of the goal cell? (glow gold to guide the player.)
+      // Texture X: where along the wall face the ray struck.
+      let wallX = side === 0 ? (cam.py + perp * rayY) : (cam.px + perp * rayX);
+      wallX -= Math.floor(wallX);
+      let texX = (wallX * TEX) | 0;
+      if (side === 0 && rayX > 0) texX = TEX - texX - 1;
+      if (side === 1 && rayY < 0) texX = TEX - texX - 1;
+
       const nearGoal =
         (mapX === gCx && Math.abs(mapY - gCy) === 1) ||
         (mapY === gCy && Math.abs(mapX - gCx) === 1) ||
         (mapX === gCx && mapY === gCy);
 
-      // Base colour by wall orientation, darkened with distance.
-      let r, g, b;
-      if (nearGoal) { r = 255; g = 209; b = 102; }
-      else if (side === 0) { r = 108; g = 140; b = 255; }
-      else { r = 78; g = 100; b = 190; }
-      const shade = Math.max(0.25, Math.min(1, 1 / (1 + dist * 0.18)));
-      ctx.fillStyle = `rgb(${Math.round(r * shade)},${Math.round(g * shade)},${Math.round(b * shade)})`;
-      ctx.fillRect(col, drawStart, 1, drawEnd - drawStart);
-      zBuffer[col] = dist;
+      let f = perp / FOG; if (f > 1) f = 1; f *= f;
+      const sideShade = side === 1 ? 0.68 : 1.0; // N/S faces darker
+
+      const stepTex = TEX / lineH;
+      let texPos = (ds - halfH + lineH / 2) * stepTex;
+      for (let y = ds; y < de; y++) {
+        const texY = (texPos | 0) & (TEX - 1); texPos += stepTex;
+        const ti = (texY * TEX + texX) * 3;
+        let r = wallTex[ti] * sideShade;
+        let g = wallTex[ti + 1] * sideShade;
+        let b = wallTex[ti + 2] * sideShade;
+        if (nearGoal) { r = r * 0.35 + 166; g = g * 0.35 + 136; b = b * 0.35 + 66; }
+        const idx = (y * RW + col) * 4;
+        data[idx] = r + (FOGR - r) * f;
+        data[idx + 1] = g + (FOGG - g) * f;
+        data[idx + 2] = b + (FOGB - b) * f;
+        data[idx + 3] = 255;
+      }
     }
 
+    ctx.putImageData(frameImg, 0, 0);
     drawMonster(dirX, dirY, planeX, planeY, zBuffer);
+    drawVignette();
     drawMinimap();
+  }
+
+  // Darkened edges for depth and a torch-lit, enclosed feel.
+  function drawVignette() {
+    const vg = ctx.createRadialGradient(RW / 2, RH * 0.52, RH * 0.15, RW / 2, RH * 0.52, RH * 0.82);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.6)');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, RW, RH);
   }
 
   // Billboard-project the monster into the scene, occluded by walls via zBuffer.

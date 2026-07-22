@@ -32,6 +32,8 @@ function makeMockCtx() {
     fillStyle: '#000', strokeStyle: '#000', lineWidth: 1, globalAlpha: 1,
     createLinearGradient: () => gradient,
     createRadialGradient: () => gradient,
+    createImageData: (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
+    putImageData(img) { calls.putImageData = (calls.putImageData || 0) + 1; this.lastImage = img; },
     fillRect() { calls.fillRect++; },
     strokeRect() {},
     beginPath() {}, closePath() {},
@@ -66,7 +68,25 @@ try {
 
 console.log('3D Maze render smoke test\n');
 check('loading + first render did not throw', threw === null);
-check('walls were rasterised (fillRect called many times)', mock.calls.fillRect > 100);
+check('textured frame was blitted (putImageData called)', (mock.calls.putImageData || 0) > 0);
+check('minimap was rasterised (fillRect called many times)', mock.calls.fillRect > 100);
+
+// Inspect the actual pixel buffer: it must contain real, varied, non-black data
+// (a NaN in the fog/texture math would clamp to 0 and show as black).
+const px = mock.lastImage && mock.lastImage.data;
+check('frame buffer has pixel data', !!px && px.length === 640 * 400 * 4);
+let nonBlack = 0, minV = 255, maxV = 0;
+// Sample the floor half (bottom of the frame), which is always textured.
+for (let y = 300; y < 400; y += 7) {
+  for (let x = 0; x < 640; x += 11) {
+    const r = px[(y * 640 + x) * 4];
+    if (r > 8) nonBlack++;
+    if (r < minV) minV = r;
+    if (r > maxV) maxV = r;
+  }
+}
+check('floor is rendered (many non-black textured pixels)', nonBlack > 50);
+check('floor has texture variation (not a flat fill)', maxV - minV > 15);
 
 const D = window.MazeDebug;
 

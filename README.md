@@ -62,8 +62,12 @@ exit in the fewest steps — while a **👹 monster hunts you through the maze**
 
 **Features**
 
-- **First-person 3D view** via raycasting, with a **fog-of-war minimap** that
-  reveals where you've explored (the monster shows as a red dot).
+- **Textured first-person 3D view** via raycasting: procedural **brick walls**,
+  perspective **floor & ceiling casting** (stone tiles / dark ceiling),
+  **distance fog** for atmospheric depth, and a **vignette** for a torch-lit,
+  enclosed feel. Rendered per-pixel into an ImageData buffer.
+- A **fog-of-war minimap** that reveals where you've explored (the monster shows
+  as a red dot).
 - **A hunting monster** that chases you along the shortest path (rendered as a
   distance-shaded billboard sprite, correctly occluded by walls via a Z-buffer).
   Reach the exit before it catches you — getting caught triggers a **jumpscare**
