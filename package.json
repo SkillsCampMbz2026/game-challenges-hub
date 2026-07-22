@@ -1,0 +1,13 @@
+{
+  "name": "game-challenges-hub",
+  "version": "1.0.0",
+  "description": "A hub of browser game challenges, featuring a Tower of Hanoi puzzle.",
+  "scripts": {
+    "test": "node test/solve.test.js",
+    "test:ui": "node test/ui.test.js"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  }
+}

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tower of Hanoi — Game Challenges</title>
+  <meta name="description" content="Play Tower of Hanoi: drag or click disks, beat it in the fewest moves, and top the leaderboard." />
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗼</text></svg>" />
+</head>
+<body>
+  <div class="container">
+    <header class="site-header">
+      <div class="brand">
+        <div class="logo">🗼</div>
+        <div>
+          <h1>Tower of Hanoi</h1>
+          <p class="tagline">Fewest moves wins.</p>
+        </div>
+      </div>
+      <a class="back-link" href="index.html">← All challenges</a>
+    </header>
+
+    <p class="objective">
+      🎯 <strong>Objective:</strong> Move the entire stack of disks from the
+      <strong>Start</strong> tower to the <strong>Goal</strong> tower using the
+      fewest moves possible.
+    </p>
+
+    <div class="layout">
+      <!-- Game panel -->
+      <section class="panel">
+        <div class="controls">
+          <div class="control-group">
+            <label for="difficulty">Difficulty (disks)</label>
+            <select id="difficulty">
+              <option value="3">3 — Easy</option>
+              <option value="4">4 — Casual</option>
+              <option value="5" selected>5 — Normal</option>
+              <option value="6">6 — Hard</option>
+              <option value="7">7 — Expert</option>
+              <option value="8">8 — Master</option>
+            </select>
+          </div>
+          <button id="restart" class="secondary">↻ Restart</button>
+        </div>
+
+        <div class="stats">
+          <div class="stat">
+            <div class="k">Moves</div>
+            <div class="v" id="moves">0</div>
+          </div>
+          <div class="stat">
+            <div class="k">Minimum</div>
+            <div class="v optimal" id="minMoves">31</div>
+          </div>
+          <div class="stat">
+            <div class="k">Time</div>
+            <div class="v" id="time">00:00</div>
+          </div>
+        </div>
+
+        <div class="board" id="board" aria-label="Tower of Hanoi board"></div>
+      </section>
+
+      <!-- Instructions -->
+      <aside class="panel instructions">
+        <h2>How to play</h2>
+        <ul>
+          <li><strong>Click</strong> a tower to pick up its top disk, then click another tower to drop it.</li>
+          <li>Or <strong>drag</strong> the top disk from one tower onto another.</li>
+          <li>A disk can never rest on a <strong>smaller</strong> disk.</li>
+          <li>Only the <strong>top</strong> disk of a tower can move (it's outlined).</li>
+          <li>Win by rebuilding the full stack on the <strong>Goal</strong> tower.</li>
+        </ul>
+        <p style="margin-top:14px; color: var(--muted); font-size:.9rem;">
+          The minimum number of moves is <strong>2ⁿ − 1</strong> for
+          <em>n</em> disks. Match it for a ✨ perfect run.
+        </p>
+      </aside>
+
+      <!-- Leaderboard -->
+      <section class="panel full">
+        <div class="controls" style="justify-content: space-between;">
+          <h2 style="margin:0;">🏆 Leaderboard <span style="color:var(--muted);font-weight:400;font-size:.9rem;">(this device · current difficulty)</span></h2>
+          <button id="clearLeaderboard" class="secondary">Clear</button>
+        </div>
+        <table>
+          <thead>
+            <tr><th>#</th><th>Player</th><th>Moves</th><th>Time</th><th>Date</th></tr>
+          </thead>
+          <tbody id="leaderboardBody"></tbody>
+        </table>
+      </section>
+    </div>
+
+    <p class="footer">Tip: fewer moves ranks higher; ties are broken by time.</p>
+  </div>
+
+  <!-- Victory overlay -->
+  <div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-labelledby="winTitle">
+    <div class="modal">
+      <h2 id="winTitle">🎉 You solved it!</h2>
+      <div class="win-stats">
+        <div><div class="v" id="winMoves">0</div><div class="k">Moves</div></div>
+        <div><div class="v" id="winMin">0</div><div class="k">Minimum</div></div>
+        <div><div class="v" id="winTime">00:00</div><div class="k">Time</div></div>
+      </div>
+      <p id="winVerdict"></p>
+      <div class="name-row">
+        <input type="text" id="playerName" maxlength="24" placeholder="Enter your name for the leaderboard" />
+      </div>
+      <div class="actions">
+        <button id="saveScore">Save score</button>
+        <button id="playAgain" class="secondary">Play again</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/game-core.js"></script>
+  <script src="js/hanoi-ui.js"></script>
+</body>
+</html>
