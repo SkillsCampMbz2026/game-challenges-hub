@@ -148,6 +148,8 @@ check('monster catches the player (game over)', caughtState.caught === true);
 check('caught state is shown with the "Caught!" title',
   document.getElementById('winTitle').textContent.includes('Caught') &&
   document.getElementById('overlay').classList.contains('show'));
+check('jumpscare fires on catch',
+  document.getElementById('jumpscare').classList.contains('show'));
 check('caught run is NOT saved to the leaderboard',
   document.getElementById('saveScore').style.display === 'none' &&
   JSON.parse(window.localStorage.getItem('maze.leaderboard.v1') || '[]').length === savedRows);

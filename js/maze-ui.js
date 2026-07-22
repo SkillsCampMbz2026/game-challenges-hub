@@ -45,6 +45,7 @@
     playAgain: document.getElementById('playAgain'),
     leaderboard: document.getElementById('leaderboardBody'),
     clearBoard: document.getElementById('clearLeaderboard'),
+    jumpscare: document.getElementById('jumpscare'),
     up: document.getElementById('btnUp'),
     down: document.getElementById('btnDown'),
     tleft: document.getElementById('btnTurnLeft'),
@@ -75,6 +76,8 @@
   let monsterEnabled = true; // toggle (used to disable the monster in tests)
   let monsterTimer = null;
   let caught = false;        // the monster reached the player
+  let jsTimer = null;        // jumpscare hide timeout
+  let audioCtx = null;       // lazily created on first scare
 
   /* ---------- Helpers ---------- */
   function cellCentre(x, y) {
@@ -126,6 +129,8 @@
     reveal(player.x, player.y);
     stopMonster();
     monster = monsterEnabled ? placeMonster() : null;
+    clearTimeout(jsTimer);
+    if (el.jumpscare) el.jumpscare.classList.remove('show');
     elapsedMs = 0;
     stopTimer();
     startTime = null;
@@ -543,11 +548,72 @@
     el.playerName.focus();
   }
 
+  /* ---------- Jumpscare ---------- */
+  function getAudio() {
+    if (audioCtx) return audioCtx;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    try { audioCtx = new AC(); } catch (_) { audioCtx = null; }
+    return audioCtx;
+  }
+
+  // A short, dissonant screech synthesised on the fly (no audio files).
+  function playScreech() {
+    const ac = getAudio();
+    if (!ac) return;
+    try {
+      if (ac.state === 'suspended') ac.resume();
+      const now = ac.currentTime;
+      const dur = 0.9;
+
+      // White-noise burst through a bandpass — the "shriek" texture.
+      const buffer = ac.createBuffer(1, Math.floor(ac.sampleRate * dur), ac.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+      const noise = ac.createBufferSource();
+      noise.buffer = buffer;
+      const bp = ac.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 1400;
+      bp.Q.value = 0.8;
+      const ng = ac.createGain();
+      ng.gain.setValueAtTime(0.0001, now);
+      ng.gain.exponentialRampToValueAtTime(0.6, now + 0.03);
+      ng.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      noise.connect(bp).connect(ng).connect(ac.destination);
+      noise.start(now); noise.stop(now + dur);
+
+      // A detuned sawtooth sliding downward — the "growl".
+      const osc = ac.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(900, now);
+      osc.frequency.exponentialRampToValueAtTime(140, now + dur);
+      const og = ac.createGain();
+      og.gain.setValueAtTime(0.0001, now);
+      og.gain.exponentialRampToValueAtTime(0.35, now + 0.04);
+      og.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      osc.connect(og).connect(ac.destination);
+      osc.start(now); osc.stop(now + dur);
+    } catch (_) { /* audio best-effort only */ }
+  }
+
+  function triggerJumpscare() {
+    if (!el.jumpscare) return;
+    el.jumpscare.classList.remove('show');
+    // Force reflow so the CSS animation restarts every time.
+    void el.jumpscare.offsetWidth;
+    el.jumpscare.classList.add('show');
+    playScreech();
+    clearTimeout(jsTimer);
+    jsTimer = setTimeout(() => el.jumpscare.classList.remove('show'), 1100);
+  }
+
   function onCaught() {
     if (caught || won) return;
     caught = true;
     stopTimer();
     stopMonster();
+    triggerJumpscare();
     el.winTitle.textContent = '👹 Caught!';
     el.winMoves.textContent = String(moveCount);
     el.winMin.textContent = String(optimal);

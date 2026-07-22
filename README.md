@@ -66,8 +66,11 @@ exit in the fewest steps — while a **👹 monster hunts you through the maze**
   reveals where you've explored (the monster shows as a red dot).
 - **A hunting monster** that chases you along the shortest path (rendered as a
   distance-shaded billboard sprite, correctly occluded by walls via a Z-buffer).
-  Reach the exit before it catches you — getting caught ends the run and is not
-  saved to the leaderboard. Monster speed scales with difficulty.
+  Reach the exit before it catches you — getting caught triggers a **jumpscare**
+  (full-screen flashing monster face + a screech synthesised via the Web Audio
+  API, no audio files) and ends the run; caught runs are not saved to the
+  leaderboard. Monster speed scales with difficulty. Respects
+  `prefers-reduced-motion`.
 - Move with **arrow keys / WASD** or on-screen **D-pad** buttons (touch-friendly).
   Turning is free; only forward/back steps count.
 - **Randomly generated, always-solvable** mazes (a perfect maze built with a
