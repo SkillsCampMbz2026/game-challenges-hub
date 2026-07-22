@@ -87,6 +87,41 @@
   const floorTex = makeFloorTexture();
   const ceilTex = makeCeilTexture();
 
+  // Monster photo sprite. Loaded from assets/monster.png and background-keyed
+  // (dark night pixels -> transparent) so the creature composits cleanly into
+  // the maze. Until/unless it loads, the procedural creature is drawn instead.
+  const MONSTER_SRC = 'assets/monster.png';
+  let monsterImg = null;       // keyed offscreen canvas
+  let monsterImgAspect = 1;
+  (function loadMonsterImage() {
+    if (typeof Image === 'undefined' || typeof document === 'undefined') return;
+    const img = new Image();
+    img.onload = function () {
+      try {
+        const w = img.naturalWidth || img.width;
+        const h = img.naturalHeight || img.height;
+        if (!w || !h) return;
+        const off = document.createElement('canvas');
+        off.width = w; off.height = h;
+        const octx = off.getContext('2d');
+        if (!octx) return;
+        octx.drawImage(img, 0, 0);
+        const id = octx.getImageData(0, 0, w, h);
+        const d = id.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+          if (lum < 42) d[i + 3] = 0;                       // dark bg -> clear
+          else if (lum < 82) d[i + 3] = ((lum - 42) / 40) * 255; // soft edge
+        }
+        octx.putImageData(id, 0, 0);
+        monsterImg = off;
+        monsterImgAspect = w / h;
+      } catch (_) { monsterImg = null; }
+    };
+    img.onerror = function () { monsterImg = null; };
+    img.src = MONSTER_SRC;
+  })();
+
   const el = {
     mode: document.getElementById('mode'),
     difficulty: document.getElementById('difficulty'),
@@ -111,6 +146,8 @@
     leaderboard: document.getElementById('leaderboardBody'),
     clearBoard: document.getElementById('clearLeaderboard'),
     jumpscare: document.getElementById('jumpscare'),
+    jsImg: document.getElementById('jsImg'),
+    jsFace: document.getElementById('jsFace'),
     up: document.getElementById('btnUp'),
     down: document.getElementById('btnDown'),
     tleft: document.getElementById('btnTurnLeft'),
@@ -559,9 +596,20 @@
     if (tY <= 0.1) return; // behind the camera
 
     const screenX = (RW / 2) * (1 + tX / tY);
-    const sz = Math.abs(RH / tY) * 0.85;
-    const startX = Math.max(0, Math.floor(screenX - sz / 2));
-    const endX = Math.min(RW - 1, Math.ceil(screenX + sz / 2));
+    const sz = Math.abs(RH / tY) * 0.9;
+
+    // Sprite bounding box (photo is grounded with its feet on the floor line).
+    let drawW, drawH, left, top;
+    if (monsterImg) {
+      drawH = sz * 1.25;
+      drawW = drawH * monsterImgAspect;
+      left = screenX - drawW / 2;
+      top = (RH / 2 + sz / 2) - drawH;
+    } else {
+      drawW = sz; drawH = sz; left = screenX - sz / 2; top = RH / 2 - sz / 2;
+    }
+    const startX = Math.max(0, Math.floor(left));
+    const endX = Math.min(RW - 1, Math.ceil(left + drawW));
 
     // Clip to only the columns where the monster is nearer than the wall.
     ctx.save();
@@ -572,7 +620,19 @@
     }
     if (!anyVisible) { ctx.restore(); return; }
     ctx.clip();
-    drawCreature(screenX, sz, tY);
+    if (monsterImg) {
+      ctx.drawImage(monsterImg, left, top, drawW, drawH);
+      // Blend the sprite toward the fog colour with distance (sprite pixels only).
+      let f = tY / FOG; if (f > 1) f = 1; f *= f;
+      if (f > 0.01) {
+        ctx.globalCompositeOperation = 'source-atop';
+        ctx.fillStyle = `rgba(${FOGR},${FOGG},${FOGB},${f})`;
+        ctx.fillRect(left, top, drawW, drawH);
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    } else {
+      drawCreature(screenX, sz, tY);
+    }
     ctx.restore();
   }
 
@@ -925,6 +985,17 @@
       default: break;
     }
   });
+  // Jumpscare uses the monster photo; if it's missing, fall back to the emoji.
+  if (el.jsImg) {
+    el.jsImg.addEventListener('error', () => {
+      el.jsImg.style.display = 'none';
+      if (el.jsFace) el.jsFace.style.display = '';
+    });
+    el.jsImg.addEventListener('load', () => {
+      if (el.jsFace) el.jsFace.style.display = 'none';
+    });
+  }
+
   el.up.addEventListener('click', stepForward);
   el.down.addEventListener('click', stepBackward);
   el.tleft.addEventListener('click', turnLeft);

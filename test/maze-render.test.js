@@ -30,6 +30,8 @@ function makeMockCtx() {
     calls,
     // stylable properties (plain assignable fields)
     fillStyle: '#000', strokeStyle: '#000', lineWidth: 1, globalAlpha: 1,
+    globalCompositeOperation: 'source-over',
+    drawImage() {},
     createLinearGradient: () => gradient,
     createRadialGradient: () => gradient,
     createImageData: (w, h) => ({ width: w, height: h, data: new Uint8ClampedArray(w * h * 4) }),
