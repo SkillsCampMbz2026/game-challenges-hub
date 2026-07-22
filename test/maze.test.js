@@ -81,5 +81,23 @@ check('start and goal are distinct corners',
   maze.start.x === 0 && maze.start.y === 0 &&
   maze.goal.x === maze.cols - 1 && maze.goal.y === maze.rows - 1);
 
+// Line of sight, on a hand-built 3x1 straight corridor.
+// Expanded grid (gw=7, gh=3); row y=1 is the corridor of open cells.
+const losMaze = {
+  cols: 3, rows: 1, gw: 7, gh: 3,
+  start: { x: 0, y: 0 }, goal: { x: 2, y: 0 },
+  grid: [
+    new Uint8Array([1, 1, 1, 1, 1, 1, 1]),
+    new Uint8Array([1, 0, 0, 0, 0, 0, 1]), // open straight corridor
+    new Uint8Array([1, 1, 1, 1, 1, 1, 1]),
+  ],
+};
+check('clear straight corridor has line of sight',
+  M.hasLineOfSight(losMaze, { x: 0, y: 0 }, { x: 2, y: 0 }) === true);
+// Drop a wall in the middle of the corridor -> sight is blocked.
+losMaze.grid[1][3] = 1;
+check('a wall blocks line of sight',
+  M.hasLineOfSight(losMaze, { x: 0, y: 0 }, { x: 2, y: 0 }) === false);
+
 console.log(`\nResult: ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

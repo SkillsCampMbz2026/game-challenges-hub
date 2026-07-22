@@ -154,5 +154,39 @@ check('caught run is NOT saved to the leaderboard',
   document.getElementById('saveScore').style.display === 'none' &&
   JSON.parse(window.localStorage.getItem('maze.leaderboard.v1') || '[]').length === savedRows);
 
+// --- Hide & Seek mode: the seeker counts first, then hunts on line of sight. ---
+console.log('\nHide & Seek mode');
+D.setMonsterEnabled(true);
+D.setMode('seek'); // regenerate the maze in Hide & Seek mode
+let hs = D.state();
+check('mode switched to Hide & Seek', hs.mode === 'seek');
+check('seeker starts by counting', hs.seekerState === 'count' && hs.countdownMs > 0);
+check('a seeker spawned', hs.monster !== null);
+
+// Put the seeker right next to the player.
+function openNeighbour() {
+  const p = D.state().player;
+  for (let d = 0; d < 4; d++) {
+    if (M.canMove(D.maze(), p.x, p.y, d)) return { x: p.x + M.DIRVEC[d][0], y: p.y + M.DIRVEC[d][1] };
+  }
+  return null;
+}
+const nb2 = openNeighbour();
+D.setMonster(nb2.x, nb2.y);
+const cd0 = D.state().countdownMs;
+D.monsterStep();
+let afterCount = D.state();
+check('seeker stays put while counting', afterCount.monster.x === nb2.x && afterCount.monster.y === nb2.y);
+check('countdown ticks down', afterCount.countdownMs < cd0);
+check('no catch while the seeker is counting', afterCount.caught === false);
+
+// End the count; adjacent means the seeker has line of sight and will pounce.
+D.endCountdown();
+D.setMonster(nb2.x, nb2.y);
+D.monsterStep();
+const hunted = D.state();
+check('seeker remembers where it last saw the player', hunted.lastSeen !== null);
+check('seeker catches the player once the hunt is on', hunted.caught === true);
+
 console.log(`\nResult: ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

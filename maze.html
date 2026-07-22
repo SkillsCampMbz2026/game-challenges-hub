@@ -32,6 +32,13 @@
       <section class="panel">
         <div class="controls">
           <div class="control-group">
+            <label for="mode">Mode</label>
+            <select id="mode">
+              <option value="escape" selected>🏃 Escape</option>
+              <option value="seek">🙈 Hide &amp; Seek</option>
+            </select>
+          </div>
+          <div class="control-group">
             <label for="difficulty">Difficulty</label>
             <select id="difficulty">
               <option value="easy">Easy — 6×6</option>
@@ -62,6 +69,7 @@
         <div class="maze-viewport">
           <canvas id="maze3d" aria-label="First-person 3D maze view"></canvas>
           <div class="maze-hint-banner">Use arrow keys / WASD — or the buttons below</div>
+          <div class="seeker-banner" id="seekerBanner" style="display:none;"></div>
         </div>
 
         <div class="dpad" aria-label="Movement controls">
@@ -84,6 +92,11 @@
           <li>Head for the <strong>gold</strong> walls — that's the exit.</li>
           <li>Avoid the <strong>👹 monster</strong> — it hunts you through the maze.
             If it reaches you, it's game over.</li>
+          <li><strong>🏃 Escape</strong> mode: the monster always knows where you are.</li>
+          <li><strong>🙈 Hide &amp; Seek</strong> mode: the seeker <em>counts</em> first
+            to give you a head start, then only chases when it has
+            <strong>line of sight</strong>. Break its view around a corner and it
+            loses you and starts searching!</li>
           <li>Every maze is <strong>randomly generated and always solvable</strong>.</li>
           <li>Match the <strong>Shortest</strong> step count for a ✨ perfect escape.</li>
         </ul>

@@ -68,13 +68,22 @@ exit in the fewest steps — while a **👹 monster hunts you through the maze**
   enclosed feel. Rendered per-pixel into an ImageData buffer.
 - A **fog-of-war minimap** that reveals where you've explored (the monster shows
   as a red dot).
-- **A hunting monster** that chases you along the shortest path (rendered as a
-  distance-shaded billboard sprite, correctly occluded by walls via a Z-buffer).
-  Reach the exit before it catches you — getting caught triggers a **jumpscare**
-  (full-screen flashing monster face + a screech synthesised via the Web Audio
-  API, no audio files) and ends the run; caught runs are not saved to the
-  leaderboard. Monster speed scales with difficulty. Respects
-  `prefers-reduced-motion`.
+- **A hunting monster** that chases you (rendered as a distance-shaded billboard
+  sprite, correctly occluded by walls via a Z-buffer). Reach the exit before it
+  catches you. Monster speed scales with difficulty.
+- **Two game modes:**
+  - **🏃 Escape** — the monster always knows exactly where you are and takes the
+    shortest path to you.
+  - **🙈 Hide & Seek** — the seeker *counts* first (a head start to hide), then
+    only chases when it has **line of sight** to you. Break its sightline around
+    a corner and it loses you, heads to your last-seen spot, then **searches**
+    (wanders). A live banner shows *counting / spotted / searching*.
+- **Jumpscare on capture** — getting caught triggers a full-screen scare: a
+  white impact flash, a strobing red screen, a shaking chromatic-aberration
+  monster face, a layered screech synthesised via the Web Audio API (impact hit
+  + noise shriek + detuned growl + high stinger + sub rumble, no audio files),
+  and a haptic buzz where supported. Caught runs are not saved to the
+  leaderboard. Honours `prefers-reduced-motion`.
 - Move with **arrow keys / WASD** or on-screen **D-pad** buttons (touch-friendly).
   Turning is free; only forward/back steps count.
 - **Randomly generated, always-solvable** mazes (a perfect maze built with a

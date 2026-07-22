@@ -88,10 +88,12 @@
   const ceilTex = makeCeilTexture();
 
   const el = {
+    mode: document.getElementById('mode'),
     difficulty: document.getElementById('difficulty'),
     restart: document.getElementById('restart'),
     hint: document.getElementById('hint'),
     canvas: document.getElementById('maze3d'),
+    seekerBanner: document.getElementById('seekerBanner'),
     moves: document.getElementById('moves'),
     minMoves: document.getElementById('minMoves'),
     time: document.getElementById('time'),
@@ -142,6 +144,11 @@
   let jsTimer = null;        // jumpscare hide timeout
   let audioCtx = null;       // lazily created on first scare
 
+  let mode = 'escape';       // 'escape' | 'seek'
+  let seekerState = 'chase'; // 'count' | 'chase' | 'search'
+  let lastSeen = null;       // last cell the seeker saw the player at
+  let countdownMs = 0;       // Hide & Seek: time left before the hunt begins
+
   /* ---------- Helpers ---------- */
   function cellCentre(x, y) {
     return { px: 2 * x + 1 + 0.5, py: 2 * y + 1 + 0.5 };
@@ -175,6 +182,7 @@
 
   /* ---------- Game setup ---------- */
   function newGame() {
+    mode = el.mode ? el.mode.value : 'escape';
     const d = DIFFICULTIES[el.difficulty.value];
     maze = M.generateMaze(d.cols, d.rows, Math.random);
     player = { x: maze.start.x, y: maze.start.y };
@@ -192,6 +200,11 @@
     reveal(player.x, player.y);
     stopMonster();
     monster = monsterEnabled ? placeMonster() : null;
+    // Hide & Seek: the seeker "counts" for a head start before hunting.
+    lastSeen = null;
+    countdownMs = mode === 'seek' ? 3000 : 0;
+    seekerState = mode === 'seek' ? 'count' : 'chase';
+    updateSeekerBanner();
     clearTimeout(jsTimer);
     if (el.jumpscare) el.jumpscare.classList.remove('show');
     elapsedMs = 0;
@@ -264,11 +277,72 @@
     if (monsterTimer) { clearInterval(monsterTimer); monsterTimer = null; }
   }
 
-  // One chase step: move one cell along the shortest path toward the player.
+  function updateSeekerBanner() {
+    if (!el.seekerBanner) return;
+    if (mode !== 'seek' || won || caught) { el.seekerBanner.style.display = 'none'; return; }
+    el.seekerBanner.style.display = '';
+    el.seekerBanner.classList.remove('count', 'search', 'spotted');
+    if (seekerState === 'count') {
+      el.seekerBanner.classList.add('count');
+      el.seekerBanner.textContent = `🙈 Seeker counting… ${Math.ceil(countdownMs / 1000)}`;
+    } else if (seekerState === 'chase') {
+      el.seekerBanner.classList.add('spotted');
+      el.seekerBanner.textContent = '👁️ Spotted! Run!';
+    } else {
+      el.seekerBanner.classList.add('search');
+      el.seekerBanner.textContent = '🔦 Seeker is searching…';
+    }
+  }
+
+  // Move the monster one cell along the shortest path toward `target` cell.
+  function stepMonsterToward(target) {
+    const path = M.shortestPath(maze, { x: monster.x, y: monster.y }, target);
+    if (path && path.length > 1) monster = { x: path[1].x, y: path[1].y };
+  }
+
+  // Move the monster to a random open neighbour (searching / wandering).
+  function wanderMonster() {
+    const open = [];
+    for (let d = 0; d < 4; d++) {
+      if (M.canMove(maze, monster.x, monster.y, d)) {
+        open.push({ x: monster.x + M.DIRVEC[d][0], y: monster.y + M.DIRVEC[d][1] });
+      }
+    }
+    if (open.length) monster = open[Math.floor(Math.random() * open.length)];
+  }
+
+  // One monster tick. Behaviour depends on the game mode.
   function monsterChaseStep() {
     if (!monster || won || caught) return;
-    const path = M.shortestPath(maze, { x: monster.x, y: monster.y }, { x: player.x, y: player.y });
-    if (path && path.length > 1) monster = { x: path[1].x, y: path[1].y };
+
+    if (mode === 'seek') {
+      if (countdownMs > 0) {
+        // Seeker is still counting — it stays put and can't catch you yet.
+        countdownMs -= DIFFICULTIES[el.difficulty.value].monsterMs;
+        if (countdownMs <= 0) { countdownMs = 0; seekerState = 'search'; }
+        updateSeekerBanner();
+        draw();
+        return;
+      }
+      const sees = M.hasLineOfSight(maze, monster, player);
+      if (sees) {
+        lastSeen = { x: player.x, y: player.y };
+        seekerState = 'chase';
+        stepMonsterToward(player);
+      } else if (lastSeen) {
+        seekerState = 'search';
+        stepMonsterToward(lastSeen);
+        if (monster.x === lastSeen.x && monster.y === lastSeen.y) lastSeen = null;
+      } else {
+        seekerState = 'search';
+        wanderMonster();
+      }
+      updateSeekerBanner();
+    } else {
+      // Escape mode: the monster always knows exactly where you are.
+      stepMonsterToward(player);
+    }
+
     draw();
     if (monster.x === player.x && monster.y === player.y) onCaught();
   }
@@ -302,7 +376,8 @@
       cam = { px: c.px, py: c.py, angle: FACE_ANGLE[facing] };
       draw();
     }
-    if (monster && player.x === monster.x && player.y === monster.y) { onCaught(); return true; }
+    const seekerBlind = mode === 'seek' && countdownMs > 0;
+    if (monster && !seekerBlind && player.x === monster.x && player.y === monster.y) { onCaught(); return true; }
     checkWin();
     return true;
   }
@@ -648,6 +723,7 @@
     won = true;
     stopTimer();
     stopMonster();
+    updateSeekerBanner();
     updateMovesStyle();
     el.winTitle.textContent = '🎉 You escaped!';
     el.nameRow.style.display = '';
@@ -674,43 +750,77 @@
     return audioCtx;
   }
 
-  // A short, dissonant screech synthesised on the fly (no audio files).
+  // A loud, dissonant screech synthesised on the fly (no audio files).
   function playScreech() {
     const ac = getAudio();
     if (!ac) return;
     try {
       if (ac.state === 'suspended') ac.resume();
       const now = ac.currentTime;
-      const dur = 0.9;
+      const dur = 1.3;
 
-      // White-noise burst through a bandpass — the "shriek" texture.
-      const buffer = ac.createBuffer(1, Math.floor(ac.sampleRate * dur), ac.sampleRate);
-      const data = buffer.getChannelData(0);
-      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-      const noise = ac.createBufferSource();
-      noise.buffer = buffer;
+      // 0) Sharp impact "hit" — a very short, loud noise crack at t0.
+      const impLen = Math.floor(ac.sampleRate * 0.09);
+      const impBuf = ac.createBuffer(1, impLen, ac.sampleRate);
+      const impData = impBuf.getChannelData(0);
+      for (let i = 0; i < impLen; i++) impData[i] = (Math.random() * 2 - 1) * (1 - i / impLen);
+      const imp = ac.createBufferSource(); imp.buffer = impBuf;
+      const ig = ac.createGain();
+      ig.gain.setValueAtTime(0.9, now);
+      ig.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+      imp.connect(ig).connect(ac.destination);
+      imp.start(now); imp.stop(now + 0.12);
+
+      // 1) White-noise shriek through a bandpass.
+      const nLen = Math.floor(ac.sampleRate * dur);
+      const nBuf = ac.createBuffer(1, nLen, ac.sampleRate);
+      const nData = nBuf.getChannelData(0);
+      for (let i = 0; i < nLen; i++) nData[i] = Math.random() * 2 - 1;
+      const noise = ac.createBufferSource(); noise.buffer = nBuf;
       const bp = ac.createBiquadFilter();
-      bp.type = 'bandpass';
-      bp.frequency.value = 1400;
-      bp.Q.value = 0.8;
+      bp.type = 'bandpass'; bp.frequency.value = 1600; bp.Q.value = 0.7;
       const ng = ac.createGain();
       ng.gain.setValueAtTime(0.0001, now);
-      ng.gain.exponentialRampToValueAtTime(0.6, now + 0.03);
+      ng.gain.exponentialRampToValueAtTime(0.75, now + 0.03);
       ng.gain.exponentialRampToValueAtTime(0.0001, now + dur);
       noise.connect(bp).connect(ng).connect(ac.destination);
       noise.start(now); noise.stop(now + dur);
 
-      // A detuned sawtooth sliding downward — the "growl".
-      const osc = ac.createOscillator();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(900, now);
-      osc.frequency.exponentialRampToValueAtTime(140, now + dur);
-      const og = ac.createGain();
-      og.gain.setValueAtTime(0.0001, now);
-      og.gain.exponentialRampToValueAtTime(0.35, now + 0.04);
-      og.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-      osc.connect(og).connect(ac.destination);
-      osc.start(now); osc.stop(now + dur);
+      // 2) Detuned sawtooth growl sliding downward.
+      const growl = ac.createOscillator();
+      growl.type = 'sawtooth';
+      growl.frequency.setValueAtTime(950, now);
+      growl.frequency.exponentialRampToValueAtTime(120, now + dur);
+      const gg = ac.createGain();
+      gg.gain.setValueAtTime(0.0001, now);
+      gg.gain.exponentialRampToValueAtTime(0.4, now + 0.04);
+      gg.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      growl.connect(gg).connect(ac.destination);
+      growl.start(now); growl.stop(now + dur);
+
+      // 3) Dissonant high stinger (square, slightly detuned against the growl).
+      const stinger = ac.createOscillator();
+      stinger.type = 'square';
+      stinger.frequency.setValueAtTime(1730, now);
+      stinger.frequency.exponentialRampToValueAtTime(940, now + dur * 0.8);
+      const sg = ac.createGain();
+      sg.gain.setValueAtTime(0.0001, now);
+      sg.gain.exponentialRampToValueAtTime(0.22, now + 0.02);
+      sg.gain.exponentialRampToValueAtTime(0.0001, now + dur * 0.85);
+      stinger.connect(sg).connect(ac.destination);
+      stinger.start(now); stinger.stop(now + dur);
+
+      // 4) Sub-bass rumble for the gut-punch.
+      const sub = ac.createOscillator();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(70, now);
+      sub.frequency.exponentialRampToValueAtTime(38, now + dur);
+      const subg = ac.createGain();
+      subg.gain.setValueAtTime(0.0001, now);
+      subg.gain.exponentialRampToValueAtTime(0.5, now + 0.05);
+      subg.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+      sub.connect(subg).connect(ac.destination);
+      sub.start(now); sub.stop(now + dur);
     } catch (_) { /* audio best-effort only */ }
   }
 
@@ -721,8 +831,10 @@
     void el.jumpscare.offsetWidth;
     el.jumpscare.classList.add('show');
     playScreech();
+    // Haptic buzz on supported devices.
+    try { if (navigator.vibrate) navigator.vibrate([0, 90, 40, 140, 30, 90]); } catch (_) { /* ignore */ }
     clearTimeout(jsTimer);
-    jsTimer = setTimeout(() => el.jumpscare.classList.remove('show'), 1100);
+    jsTimer = setTimeout(() => el.jumpscare.classList.remove('show'), 1500);
   }
 
   function onCaught() {
@@ -730,6 +842,7 @@
     caught = true;
     stopTimer();
     stopMonster();
+    updateSeekerBanner();
     triggerJumpscare();
     el.winTitle.textContent = '👹 Caught!';
     el.winMoves.textContent = String(moveCount);
@@ -752,15 +865,18 @@
 
   function renderLeaderboard() {
     const rows = loadScores();
-    const filter = el.difficulty.value;
+    const diff = el.difficulty.value;
+    const md = el.mode ? el.mode.value : 'escape';
     const scoped = rows
-      .filter((r) => r.difficulty === filter)
+      // Older records predate the mode field; treat them as Escape.
+      .filter((r) => r.difficulty === diff && (r.mode || 'escape') === md)
       .sort((a, b) => a.moves - b.moves || a.timeMs - b.timeMs)
       .slice(0, 10);
     el.leaderboard.innerHTML = '';
     if (scoped.length === 0) {
+      const modeLabel = md === 'seek' ? 'Hide & Seek' : 'Escape';
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td colspan="5" class="empty-note">No scores yet for ${DIFFICULTIES[filter].label}. Be the first to escape!</td>`;
+      tr.innerHTML = `<td colspan="5" class="empty-note">No scores yet for ${modeLabel} · ${DIFFICULTIES[diff].label}. Be the first to escape!</td>`;
       el.leaderboard.appendChild(tr);
       return;
     }
@@ -790,7 +906,7 @@
     const rows = loadScores();
     const now = new Date();
     const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    rows.push({ name, difficulty: el.difficulty.value, moves: moveCount, timeMs: elapsedMs, date });
+    rows.push({ name, mode: el.mode ? el.mode.value : 'escape', difficulty: el.difficulty.value, moves: moveCount, timeMs: elapsedMs, date });
     saveScores(rows);
     renderLeaderboard();
     el.overlay.classList.remove('show');
@@ -815,6 +931,7 @@
   el.tright.addEventListener('click', turnRight);
 
   el.difficulty.addEventListener('change', () => { newGame(); renderLeaderboard(); });
+  if (el.mode) el.mode.addEventListener('change', () => { newGame(); renderLeaderboard(); });
   el.restart.addEventListener('click', newGame);
   el.hint.addEventListener('click', showHint);
   el.saveScore.addEventListener('click', saveScore);
@@ -834,6 +951,8 @@
       goal: { x: maze.goal.x, y: maze.goal.y },
       monster: monster ? { x: monster.x, y: monster.y } : null,
       facing, moveCount, optimal, won, caught,
+      mode, seekerState, countdownMs,
+      lastSeen: lastSeen ? { x: lastSeen.x, y: lastSeen.y } : null,
     }),
     maze: () => maze,
     turnLeft: () => turn(-1, false),
@@ -844,6 +963,8 @@
     setMonsterEnabled: (v) => { monsterEnabled = v; if (!v) { stopMonster(); monster = null; draw(); } },
     setMonster: (x, y) => { monster = { x, y }; draw(); },
     monsterStep: () => { monsterChaseStep(); return monster ? { x: monster.x, y: monster.y } : null; },
+    setMode: (m) => { if (el.mode) el.mode.value = m; newGame(); },
+    endCountdown: () => { countdownMs = 0; if (mode === 'seek') seekerState = 'search'; updateSeekerBanner(); },
   };
 
   newGame();

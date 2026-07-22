@@ -158,6 +158,26 @@ function isFullyConnected(maze) {
   return count === cols * rows;
 }
 
+/**
+ * Line of sight between two cells: true if the straight segment between their
+ * centres (in expanded-grid units) passes through no solid wall square. Used by
+ * the Hide & Seek "seeker" to decide whether it can see the player.
+ */
+function hasLineOfSight(maze, a, b) {
+  const ax = 2 * a.x + 1 + 0.5, ay = 2 * a.y + 1 + 0.5;
+  const bx = 2 * b.x + 1 + 0.5, by = 2 * b.y + 1 + 0.5;
+  const dx = bx - ax, dy = by - ay;
+  const dist = Math.hypot(dx, dy);
+  const steps = Math.max(1, Math.ceil(dist / 0.1));
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    const gx = Math.floor(ax + dx * t);
+    const gy = Math.floor(ay + dy * t);
+    if (maze.grid[gy][gx] === 1) return false;
+  }
+  return true;
+}
+
 const MazeCore = {
   DIRVEC,
   generateMaze,
@@ -165,6 +185,7 @@ const MazeCore = {
   shortestPath,
   minMoves,
   isFullyConnected,
+  hasLineOfSight,
 };
 
 if (typeof module !== 'undefined' && module.exports) {
