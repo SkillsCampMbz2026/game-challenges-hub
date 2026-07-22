@@ -21,6 +21,8 @@ using the fewest moves possible — never placing a larger disk on a smaller one
 - **Move counter** and a **minimum-moves** display (`2ⁿ − 1`).
 - **Difficulty selection** by number of disks (3–8).
 - **Restart** button and clear **instructions / objective**.
+- **Auto-solve** button that animates the optimal solution (not saved to the
+  leaderboard); click again to stop.
 - **Automatic victory detection** with a summary of your run.
 - **Live timer** for completion time.
 - A **localStorage leaderboard** per difficulty, saving player name, disk

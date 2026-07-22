@@ -43,6 +43,7 @@
             </select>
           </div>
           <button id="restart" class="secondary">↻ Restart</button>
+          <button id="autoSolve" class="secondary">🤖 Auto-solve</button>
         </div>
 
         <div class="stats">
@@ -107,7 +108,8 @@
         <div><div class="v" id="winTime">00:00</div><div class="k">Time</div></div>
       </div>
       <p id="winVerdict"></p>
-      <div class="name-row">
+      <p id="autoNote" class="empty-note" style="display:none;">🤖 Auto-solved — not saved to the leaderboard.</p>
+      <div class="name-row" id="nameRow">
         <input type="text" id="playerName" maxlength="24" placeholder="Enter your name for the leaderboard" />
       </div>
       <div class="actions">

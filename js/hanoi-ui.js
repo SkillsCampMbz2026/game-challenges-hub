@@ -15,6 +15,7 @@
   const el = {
     difficulty: document.getElementById('difficulty'),
     restart: document.getElementById('restart'),
+    autoSolve: document.getElementById('autoSolve'),
     board: document.getElementById('board'),
     moves: document.getElementById('moves'),
     minMoves: document.getElementById('minMoves'),
@@ -27,6 +28,8 @@
     playerName: document.getElementById('playerName'),
     saveScore: document.getElementById('saveScore'),
     playAgain: document.getElementById('playAgain'),
+    nameRow: document.getElementById('nameRow'),
+    autoNote: document.getElementById('autoNote'),
     leaderboard: document.getElementById('leaderboardBody'),
     clearBoard: document.getElementById('clearLeaderboard'),
   };
@@ -40,6 +43,9 @@
   let timerId = null;
   let elapsedMs = 0;
   let won = false;
+  let autoSolving = false; // true while the auto-solver is animating
+  let autoTimer = null;
+  let wasAutoSolved = false; // the current win came from the auto-solver
 
   /* ---------- Timer ---------- */
   function formatTime(ms) {
@@ -65,12 +71,14 @@
 
   /* ---------- Game setup ---------- */
   function newGame() {
+    stopAutoSolve();
     numDisks = parseInt(el.difficulty.value, 10);
     state = G.createState(numDisks);
     moveCount = 0;
     selectedTower = null;
     dragFrom = null;
     won = false;
+    wasAutoSolved = false;
     elapsedMs = 0;
     stopTimer();
     startTime = null;
@@ -79,6 +87,63 @@
     el.time.textContent = '00:00';
     updateMovesStyle();
     render();
+  }
+
+  /* ---------- Auto-solve ---------- */
+  function setAutoButtonMode(solving) {
+    el.autoSolve.textContent = solving ? '⏹ Stop' : '🤖 Auto-solve';
+    el.difficulty.disabled = solving;
+    el.restart.disabled = solving;
+  }
+
+  function stopAutoSolve() {
+    if (autoTimer) {
+      clearInterval(autoTimer);
+      autoTimer = null;
+    }
+    autoSolving = false;
+    setAutoButtonMode(false);
+  }
+
+  function toggleAutoSolve() {
+    if (autoSolving) {
+      stopAutoSolve();
+      return;
+    }
+    if (won) return;
+    // Solve from a clean board so the optimal sequence is always valid.
+    newGame(); // resets state (and clears any prior auto-solve)
+    autoSolving = true;
+    wasAutoSolved = true;
+    setAutoButtonMode(true);
+
+    const moves = G.solve(numDisks);
+    // Scale step delay so even 255 moves finish in a reasonable time.
+    const delay = Math.max(70, Math.min(420, Math.round(9000 / moves.length)));
+    let i = 0;
+    startTimer();
+    render(); // disables dragging immediately
+    autoTimer = setInterval(() => {
+      if (i >= moves.length) {
+        stopAutoSolve();
+        return;
+      }
+      const [from, to] = moves[i++];
+      applyAutoMove(from, to);
+    }, delay);
+  }
+
+  // Like attemptMove, but assumes a valid solver move and keeps autoSolving true through the win.
+  function applyAutoMove(from, to) {
+    state = G.applyMove(state, from, to);
+    moveCount++;
+    el.moves.textContent = String(moveCount);
+    updateMovesStyle();
+    render();
+    if (G.isSolved(state, numDisks)) {
+      stopAutoSolve();
+      onWin();
+    }
   }
 
   function updateMovesStyle() {
@@ -116,7 +181,7 @@
         disk.style.width = pct + '%';
         disk.style.background = COLORS[(size - 1) % COLORS.length];
         disk.textContent = size;
-        disk.draggable = isTop && !won;
+        disk.draggable = isTop && !won && !autoSolving;
         disk.dataset.tower = String(t);
 
         disk.addEventListener('dragstart', (e) => {
@@ -168,7 +233,7 @@
 
   /* ---------- Move handling ---------- */
   function onTowerClick(t) {
-    if (won) return;
+    if (won || autoSolving) return;
     if (selectedTower === null) {
       // Only select a tower that has a disk to move.
       if (state[t].length === 0) return;
@@ -217,9 +282,18 @@
       moveCount === min
         ? '<span class="perfect">✨ Perfect — optimal solution!</span>'
         : `Solved in ${moveCount - min} move${moveCount - min === 1 ? '' : 's'} over the minimum.`;
-    el.playerName.value = localStorage.getItem(NAME_KEY) || '';
+    // Auto-solved runs are shown but never saved to the leaderboard.
+    el.nameRow.style.display = wasAutoSolved ? 'none' : '';
+    el.saveScore.style.display = wasAutoSolved ? 'none' : '';
+    el.autoNote.style.display = wasAutoSolved ? '' : 'none';
+    if (wasAutoSolved) {
+      el.winVerdict.innerHTML = 'The optimal solution, played automatically.';
+    }
+    if (!wasAutoSolved) {
+      el.playerName.value = localStorage.getItem(NAME_KEY) || '';
+    }
     el.overlay.classList.add('show');
-    el.playerName.focus();
+    if (!wasAutoSolved) el.playerName.focus();
     render(); // disables dragging
   }
 
@@ -297,6 +371,7 @@
     renderLeaderboard();
   });
   el.restart.addEventListener('click', newGame);
+  el.autoSolve.addEventListener('click', toggleAutoSolve);
   el.saveScore.addEventListener('click', saveScore);
   el.playAgain.addEventListener('click', () => {
     el.overlay.classList.remove('show');

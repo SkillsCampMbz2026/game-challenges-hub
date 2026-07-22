@@ -84,5 +84,44 @@ clickTower(2); // try to drop disk 2 onto disk 1 (INVALID)
 check('invalid move is blocked (counter stays at 1)',
   document.getElementById('moves').textContent === '1');
 
-console.log(`\nResult: ${passed} passed, ${failed} failed`);
-process.exit(failed === 0 ? 0 : 1);
+// --- Auto-solve: clicking the button should solve the puzzle by itself,
+//     without adding anything to the leaderboard. ---
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+(async function () {
+  console.log('\nAuto-solve (3 disks)');
+  const autoBtn = document.getElementById('autoSolve');
+  const overlay = document.getElementById('overlay');
+
+  sel.value = '3';
+  sel.dispatchEvent(new window.Event('change', { bubbles: true }));
+  overlay.classList.remove('show'); // close any prior win modal
+
+  autoBtn.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  check('auto-solve starts (button switches to Stop)', autoBtn.textContent === '⏹ Stop');
+  check('difficulty locked during auto-solve', sel.disabled === true);
+
+  // 7 moves at ~420ms each ≈ 3s; poll up to 8s for the win.
+  const deadline = 8000;
+  let waited = 0;
+  while (!overlay.classList.contains('show') && waited < deadline) {
+    await wait(100);
+    waited += 100;
+  }
+
+  check('auto-solve reaches victory', overlay.classList.contains('show'));
+  check('auto-solve hits the optimal move count',
+    document.getElementById('moves').textContent === String(G.minMoves(3)));
+  check('win screen shows the "not saved" note',
+    document.getElementById('autoNote').style.display !== 'none');
+  check('save-score control hidden for auto-solve',
+    document.getElementById('saveScore').style.display === 'none');
+
+  const rowsAfter = document.querySelectorAll('#leaderboardBody tr');
+  check('auto-solve did NOT add a leaderboard row (still just TestBot)',
+    rowsAfter.length === 1 && /TestBot/.test(rowsAfter[0].textContent));
+  check('controls re-enabled after auto-solve', sel.disabled === false);
+
+  console.log(`\nResult: ${passed} passed, ${failed} failed`);
+  process.exit(failed === 0 ? 0 : 1);
+})();
