@@ -8,7 +8,7 @@ flagship challenge is a fully featured **Tower of Hanoi** puzzle.
 ## Challenges
 
 The [hub menu](index.html) lists all challenges. Currently playable: **Tower of
-Hanoi** and **Lights Out**.
+Hanoi**, **Lights Out**, and a first-person **3D Maze**.
 
 ### 🗼 Tower of Hanoi
 
@@ -54,6 +54,28 @@ orthogonal neighbours (up/down/left/right).
 > fewest-presses solution. (It correctly finds the classic result that the
 > all-lit 5×5 board needs exactly **15** presses.)
 
+### 🌀 3D Maze
+
+Escape a **first-person maze**, rendered in real 3D on a plain `<canvas>` with a
+hand-written **raycasting** engine (no libraries). Head for the glowing gold
+exit in the fewest steps.
+
+**Features**
+
+- **First-person 3D view** via raycasting, with a **fog-of-war minimap** that
+  reveals where you've explored.
+- Move with **arrow keys / WASD** or on-screen **D-pad** buttons (touch-friendly).
+  Turning is free; only forward/back steps count.
+- **Randomly generated, always-solvable** mazes (a perfect maze built with a
+  randomised depth-first "recursive backtracker", so every cell is reachable).
+- **Difficulty options** — 6×6, 10×10, 15×15, 20×20.
+- **Shortest-path display** (BFS) and a **Show path** hint that briefly draws the
+  optimal route on the minimap.
+- **Move counter**, live **timer**, **restart**, clear **instructions /
+  objective**, and **automatic victory detection** on reaching the exit.
+- A **localStorage leaderboard** per difficulty, saving player name, difficulty,
+  steps, and completion time.
+
 ## How to play — Tower of Hanoi
 
 - **Click** a tower to lift its top disk, then click another tower to drop it.
@@ -68,15 +90,20 @@ orthogonal neighbours (up/down/left/right).
 index.html                 # Game Challenges hub menu
 tower-of-hanoi.html        # The Tower of Hanoi game
 lights-out.html            # The Lights Out game
+maze.html                  # The 3D Maze game
 css/styles.css             # Shared responsive styles (dark theme)
 js/game-core.js            # Hanoi logic (rules, solver) — shared by app & tests
 js/hanoi-ui.js             # Hanoi UI: drag/click, timer, auto-solve, leaderboard
 js/lights-out-core.js      # Lights Out logic + GF(2) solver — shared by app & tests
 js/lights-out-ui.js        # Lights Out UI: grid, hint, timer, leaderboard
+js/maze-core.js            # Maze generation + BFS pathfinding — shared by app & tests
+js/maze-ui.js              # Maze UI: raycaster, movement, minimap, leaderboard
 test/solve.test.js         # Hanoi logic test (beats every difficulty optimally)
 test/ui.test.js            # Hanoi UI test (jsdom)
 test/lights-out.test.js    # Lights Out solver test (incl. the 15-move result)
 test/lights-out-ui.test.js # Lights Out UI test (jsdom): solves via clicks
+test/maze.test.js          # Maze generation/pathfinding test (always solvable)
+test/maze-ui.test.js       # Maze UI test (jsdom): solves the maze via movement
 ```
 
 The game logic lives in `js/game-core.js` with **no DOM dependencies**, so the

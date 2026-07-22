@@ -329,6 +329,59 @@ td .medal { margin-right: 6px; }
 }
 .cell.on.hint::after { color: #7a5b00; }
 
+/* ---------- 3D Maze ---------- */
+.maze-viewport {
+  position: relative;
+  width: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: #05060f;
+  box-shadow: var(--shadow);
+  margin-top: 8px;
+}
+#maze3d {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  touch-action: none;
+}
+.maze-hint-banner {
+  position: absolute;
+  top: 10px; left: 50%; transform: translateX(-50%);
+  background: rgba(6,8,22,0.7);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: var(--muted);
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: .82rem;
+  pointer-events: none;
+}
+
+.dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 56px);
+  grid-template-rows: repeat(2, 56px);
+  gap: 8px;
+  justify-content: center;
+  margin: 16px auto 0;
+}
+.dpad button {
+  width: 56px; height: 56px;
+  border-radius: 12px;
+  font-size: 1.4rem;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid rgba(255,255,255,0.12);
+  display: grid; place-items: center;
+}
+.dpad button:hover { filter: brightness(1.15); }
+.dpad .up { grid-column: 2; grid-row: 1; }
+.dpad .turn-left { grid-column: 1; grid-row: 2; }
+.dpad .down { grid-column: 2; grid-row: 2; }
+.dpad .turn-right { grid-column: 3; grid-row: 2; }
+
 .footer { text-align: center; color: var(--muted); margin-top: 40px; font-size: .85rem; }
 
 @media (min-width: 860px) {

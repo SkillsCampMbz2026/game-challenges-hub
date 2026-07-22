@@ -3,10 +3,11 @@
   "version": "1.0.0",
   "description": "A hub of browser game challenges, featuring a Tower of Hanoi puzzle.",
   "scripts": {
-    "test": "node test/solve.test.js && node test/lights-out.test.js",
-    "test:ui": "node test/ui.test.js && node test/lights-out-ui.test.js",
+    "test": "node test/solve.test.js && node test/lights-out.test.js && node test/maze.test.js",
+    "test:ui": "node test/ui.test.js && node test/lights-out-ui.test.js && node test/maze-ui.test.js",
     "test:hanoi": "node test/solve.test.js && node test/ui.test.js",
-    "test:lightsout": "node test/lights-out.test.js && node test/lights-out-ui.test.js"
+    "test:lightsout": "node test/lights-out.test.js && node test/lights-out-ui.test.js",
+    "test:maze": "node test/maze.test.js && node test/maze-ui.test.js"
   },
   "license": "MIT",
   "devDependencies": {
