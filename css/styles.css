@@ -294,6 +294,41 @@ td .medal { margin-right: 6px; }
 .modal .actions { display: flex; gap: 10px; justify-content: center; margin-top: 8px; }
 .perfect { color: var(--gold); font-weight: 700; }
 
+/* ---------- Lights Out board ---------- */
+.lo-board {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 5), 1fr);
+  gap: 10px;
+  margin-top: 8px;
+  width: min(440px, 100%);
+  margin-left: auto;
+  margin-right: auto;
+}
+.cell {
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  padding: 0;
+  cursor: pointer;
+  background: #20244a;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,0.4);
+  transition: background .12s, box-shadow .12s, transform .06s;
+}
+.cell:hover { transform: translateY(-2px); }
+.cell:active { transform: scale(0.96); }
+.cell.on {
+  background: radial-gradient(circle at 50% 35%, #fff2b0, var(--gold) 60%, #e0a800);
+  box-shadow: 0 0 18px rgba(255, 209, 102, 0.65), inset 0 1px 2px rgba(255,255,255,0.6);
+  border-color: rgba(255, 209, 102, 0.6);
+}
+.cell.hint::after {
+  content: "•";
+  color: var(--accent);
+  font-size: 1.6rem;
+  line-height: 0;
+}
+.cell.on.hint::after { color: #7a5b00; }
+
 .footer { text-align: center; color: var(--muted); margin-top: 40px; font-size: .85rem; }
 
 @media (min-width: 860px) {
