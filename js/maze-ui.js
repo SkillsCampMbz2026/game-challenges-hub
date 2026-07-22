@@ -6,12 +6,12 @@
   const LB_KEY = 'maze.leaderboard.v1';
   const NAME_KEY = 'maze.lastName';
 
-  // Difficulty => maze size in cells.
+  // Difficulty => maze size in cells + monster step interval (ms; lower = faster).
   const DIFFICULTIES = {
-    easy: { label: 'Easy', cols: 6, rows: 6 },
-    medium: { label: 'Medium', cols: 10, rows: 10 },
-    hard: { label: 'Hard', cols: 15, rows: 15 },
-    expert: { label: 'Expert', cols: 20, rows: 20 },
+    easy: { label: 'Easy', cols: 6, rows: 6, monsterMs: 750 },
+    medium: { label: 'Medium', cols: 10, rows: 10, monsterMs: 600 },
+    hard: { label: 'Hard', cols: 15, rows: 15, monsterMs: 480 },
+    expert: { label: 'Expert', cols: 20, rows: 20, monsterMs: 380 },
   };
 
   // Render resolution (CSS scales it to fit). 16:10.
@@ -33,6 +33,9 @@
     minMoves: document.getElementById('minMoves'),
     time: document.getElementById('time'),
     overlay: document.getElementById('overlay'),
+    winTitle: document.getElementById('winTitle'),
+    nameRow: document.getElementById('nameRow'),
+    caughtNote: document.getElementById('caughtNote'),
     winMoves: document.getElementById('winMoves'),
     winMin: document.getElementById('winMin'),
     winTime: document.getElementById('winTime'),
@@ -67,6 +70,11 @@
   let startTime = null;
   let timerId = null;
   let elapsedMs = 0;
+
+  let monster = null;        // {x,y} cell of the hunter, or null
+  let monsterEnabled = true; // toggle (used to disable the monster in tests)
+  let monsterTimer = null;
+  let caught = false;        // the monster reached the player
 
   /* ---------- Helpers ---------- */
   function cellCentre(x, y) {
@@ -110,11 +118,14 @@
     anim = null;
     moveCount = 0;
     won = false;
+    caught = false;
     hintPath = null;
     optimal = M.minMoves(maze);
     revealed = [];
     for (let y = 0; y < maze.gh; y++) revealed.push(new Uint8Array(maze.gw).fill(0));
     reveal(player.x, player.y);
+    stopMonster();
+    monster = monsterEnabled ? placeMonster() : null;
     elapsedMs = 0;
     stopTimer();
     startTime = null;
@@ -130,11 +141,75 @@
     el.moves.classList.toggle('over', moveCount > optimal);
   }
 
+  /* ---------- Monster ---------- */
+  // BFS distance from a cell to every other cell (-1 = unreachable).
+  function bfsDistances(from) {
+    const { cols, rows } = maze;
+    const dist = [];
+    for (let y = 0; y < rows; y++) dist.push(new Int32Array(cols).fill(-1));
+    const q = [from];
+    dist[from.y][from.x] = 0;
+    while (q.length) {
+      const cur = q.shift();
+      for (let d = 0; d < 4; d++) {
+        if (!M.canMove(maze, cur.x, cur.y, d)) continue;
+        const nx = cur.x + M.DIRVEC[d][0];
+        const ny = cur.y + M.DIRVEC[d][1];
+        if (dist[ny][nx] < 0) { dist[ny][nx] = dist[cur.y][cur.x] + 1; q.push({ x: nx, y: ny }); }
+      }
+    }
+    return dist;
+  }
+
+  // Spawn the monster far from the player's start (and not on the exit).
+  function placeMonster() {
+    const dS = bfsDistances(maze.start);
+    let maxD = 0;
+    for (let y = 0; y < maze.rows; y++) for (let x = 0; x < maze.cols; x++) maxD = Math.max(maxD, dS[y][x]);
+    const dG = bfsDistances(maze.goal);
+    const cands = [];
+    for (let y = 0; y < maze.rows; y++) {
+      for (let x = 0; x < maze.cols; x++) {
+        if (x === maze.start.x && y === maze.start.y) continue;
+        if (x === maze.goal.x && y === maze.goal.y) continue;
+        if (dS[y][x] >= maxD * 0.5 && dG[y][x] >= 2) cands.push({ x, y });
+      }
+    }
+    if (cands.length) return cands[Math.floor(Math.random() * cands.length)];
+    // Fallback: farthest cell from start that isn't the goal.
+    let best = null, bd = -1;
+    for (let y = 0; y < maze.rows; y++) {
+      for (let x = 0; x < maze.cols; x++) {
+        if (x === maze.goal.x && y === maze.goal.y) continue;
+        if (dS[y][x] > bd) { bd = dS[y][x]; best = { x, y }; }
+      }
+    }
+    return best;
+  }
+
+  function startMonster() {
+    if (!monster || monsterTimer || !monsterEnabled) return;
+    const ms = DIFFICULTIES[el.difficulty.value].monsterMs;
+    monsterTimer = setInterval(monsterChaseStep, ms);
+  }
+  function stopMonster() {
+    if (monsterTimer) { clearInterval(monsterTimer); monsterTimer = null; }
+  }
+
+  // One chase step: move one cell along the shortest path toward the player.
+  function monsterChaseStep() {
+    if (!monster || won || caught) return;
+    const path = M.shortestPath(maze, { x: monster.x, y: monster.y }, { x: player.x, y: player.y });
+    if (path && path.length > 1) monster = { x: path[1].x, y: path[1].y };
+    draw();
+    if (monster.x === player.x && monster.y === player.y) onCaught();
+  }
+
   /* ---------- Movement ---------- */
   // Move one cell in direction `dir`. changeFacing=false keeps orientation
   // (used for stepping backward). animate=false snaps instantly (tests).
   function move(dir, changeFacing, animate) {
-    if (won) return false;
+    if (won || caught) return false;
     if (anim && animate) return false; // ignore input mid-animation
     if (!M.canMove(maze, player.x, player.y, dir)) return false;
 
@@ -145,6 +220,7 @@
     el.moves.textContent = String(moveCount);
     updateMovesStyle();
     if (startTime === null && timerId === null) startTimer();
+    startMonster(); // the hunt begins on the first step
 
     const c = cellCentre(player.x, player.y);
     if (animate) {
@@ -158,12 +234,13 @@
       cam = { px: c.px, py: c.py, angle: FACE_ANGLE[facing] };
       draw();
     }
+    if (monster && player.x === monster.x && player.y === monster.y) { onCaught(); return true; }
     checkWin();
     return true;
   }
 
   function turn(delta, animate) {
-    if (won) return;
+    if (won || caught) return;
     if (anim && animate) return;
     facing = (facing + delta + 4) % 4;
     if (animate) {
@@ -215,6 +292,7 @@
     const planeY = dirX * FOV;
     const gCx = 2 * maze.goal.x + 1;
     const gCy = 2 * maze.goal.y + 1;
+    const zBuffer = new Float64Array(RW);
 
     for (let col = 0; col < RW; col++) {
       const cameraX = (2 * col) / RW - 1;
@@ -264,9 +342,91 @@
       const shade = Math.max(0.25, Math.min(1, 1 / (1 + dist * 0.18)));
       ctx.fillStyle = `rgb(${Math.round(r * shade)},${Math.round(g * shade)},${Math.round(b * shade)})`;
       ctx.fillRect(col, drawStart, 1, drawEnd - drawStart);
+      zBuffer[col] = dist;
     }
 
+    drawMonster(dirX, dirY, planeX, planeY, zBuffer);
     drawMinimap();
+  }
+
+  // Billboard-project the monster into the scene, occluded by walls via zBuffer.
+  function drawMonster(dirX, dirY, planeX, planeY, zBuffer) {
+    if (!monster) return;
+    const mx = 2 * monster.x + 1 + 0.5;
+    const my = 2 * monster.y + 1 + 0.5;
+    const spriteX = mx - cam.px;
+    const spriteY = my - cam.py;
+    const invDet = 1 / (planeX * dirY - dirX * planeY);
+    const tX = invDet * (dirY * spriteX - dirX * spriteY);
+    const tY = invDet * (-planeY * spriteX + planeX * spriteY); // depth
+    if (tY <= 0.1) return; // behind the camera
+
+    const screenX = (RW / 2) * (1 + tX / tY);
+    const sz = Math.abs(RH / tY) * 0.85;
+    const startX = Math.max(0, Math.floor(screenX - sz / 2));
+    const endX = Math.min(RW - 1, Math.ceil(screenX + sz / 2));
+
+    // Clip to only the columns where the monster is nearer than the wall.
+    ctx.save();
+    ctx.beginPath();
+    let anyVisible = false;
+    for (let x = startX; x <= endX; x++) {
+      if (tY < zBuffer[x]) { ctx.rect(x, 0, 1, RH); anyVisible = true; }
+    }
+    if (!anyVisible) { ctx.restore(); return; }
+    ctx.clip();
+    drawCreature(screenX, sz, tY);
+    ctx.restore();
+  }
+
+  function drawCreature(cx, sz, dist) {
+    const cy = RH / 2;
+    const shade = Math.max(0.4, Math.min(1, 1 / (1 + dist * 0.1)));
+    const bodyW = sz * 0.72;
+    const bodyH = sz * 0.94;
+    const dark = (v) => Math.round(v * shade);
+
+    // Body.
+    const grd = ctx.createRadialGradient(cx, cy - sz * 0.05, sz * 0.05, cx, cy, sz * 0.55);
+    grd.addColorStop(0, `rgb(${dark(190)},${dark(45)},${dark(80)})`);
+    grd.addColorStop(1, `rgb(${dark(80)},${dark(18)},${dark(55)})`);
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, bodyW / 2, bodyH / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Horns.
+    ctx.fillStyle = `rgb(${dark(60)},${dark(20)},${dark(45)})`;
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(cx + s * bodyW * 0.34, cy - bodyH * 0.38);
+      ctx.lineTo(cx + s * bodyW * 0.52, cy - bodyH * 0.64);
+      ctx.lineTo(cx + s * bodyW * 0.2, cy - bodyH * 0.48);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Glowing eyes.
+    const eyeR = sz * 0.08, eyeDX = sz * 0.15, eyeY = cy - sz * 0.1;
+    ctx.fillStyle = `rgba(255,232,120,${shade})`;
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(cx + s * eyeDX, eyeY, eyeR, eyeR, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#1a0010';
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(cx + s * eyeDX, eyeY, eyeR * 0.42, eyeR * 0.62, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Snarling mouth.
+    ctx.strokeStyle = `rgba(25,0,12,${shade})`;
+    ctx.lineWidth = Math.max(1, sz * 0.03);
+    ctx.beginPath();
+    ctx.arc(cx, cy + sz * 0.14, sz * 0.16, 0.15 * Math.PI, 0.85 * Math.PI);
+    ctx.stroke();
   }
 
   function drawMinimap() {
@@ -306,6 +466,12 @@
     const gx = 2 * maze.goal.x + 1, gy = 2 * maze.goal.y + 1;
     ctx.fillStyle = '#ffd166';
     ctx.fillRect(ox + gx * scale, oy + gy * scale, scale, scale);
+
+    // Monster marker (always visible so you can feel the threat closing in).
+    if (monster) {
+      ctx.fillStyle = '#ff4d5e';
+      ctx.fillRect(ox + (2 * monster.x + 1) * scale, oy + (2 * monster.y + 1) * scale, scale, scale);
+    }
 
     // Player marker (triangle pointing along facing).
     const pcx = ox + (2 * player.x + 1 + 0.5) * scale;
@@ -347,7 +513,7 @@
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(frame);
 
   function showHint() {
-    if (won) return;
+    if (won || caught) return;
     const path = M.shortestPath(maze, { x: player.x, y: player.y }, maze.goal);
     if (!path) return;
     hintPath = path;
@@ -359,7 +525,12 @@
   function onWin() {
     won = true;
     stopTimer();
+    stopMonster();
     updateMovesStyle();
+    el.winTitle.textContent = '🎉 You escaped!';
+    el.nameRow.style.display = '';
+    el.saveScore.style.display = '';
+    el.caughtNote.style.display = 'none';
     el.winMoves.textContent = String(moveCount);
     el.winMin.textContent = String(optimal);
     el.winTime.textContent = formatTime(elapsedMs);
@@ -370,6 +541,23 @@
     el.playerName.value = localStorage.getItem(NAME_KEY) || '';
     el.overlay.classList.add('show');
     el.playerName.focus();
+  }
+
+  function onCaught() {
+    if (caught || won) return;
+    caught = true;
+    stopTimer();
+    stopMonster();
+    el.winTitle.textContent = '👹 Caught!';
+    el.winMoves.textContent = String(moveCount);
+    el.winMin.textContent = String(optimal);
+    el.winTime.textContent = formatTime(elapsedMs);
+    el.winVerdict.innerHTML = '<span style="color:var(--danger)">The monster caught you!</span>';
+    el.nameRow.style.display = 'none';
+    el.saveScore.style.display = 'none';
+    el.caughtNote.style.display = '';
+    el.overlay.classList.add('show');
+    draw();
   }
 
   /* ---------- Leaderboard ---------- */
@@ -461,13 +649,18 @@
     state: () => ({
       player: { x: player.x, y: player.y },
       goal: { x: maze.goal.x, y: maze.goal.y },
-      facing, moveCount, optimal, won,
+      monster: monster ? { x: monster.x, y: monster.y } : null,
+      facing, moveCount, optimal, won, caught,
     }),
     maze: () => maze,
     turnLeft: () => turn(-1, false),
     turnRight: () => turn(+1, false),
     // Step to an orthogonally adjacent cell instantly (no animation), if open.
     moveToAdjacent: (dir) => move(dir, true, false),
+    // Monster controls for deterministic tests.
+    setMonsterEnabled: (v) => { monsterEnabled = v; if (!v) { stopMonster(); monster = null; draw(); } },
+    setMonster: (x, y) => { monster = { x, y }; draw(); },
+    monsterStep: () => { monsterChaseStep(); return monster ? { x: monster.x, y: monster.y } : null; },
   };
 
   newGame();

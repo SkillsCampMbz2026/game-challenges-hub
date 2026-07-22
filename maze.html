@@ -23,7 +23,8 @@
 
     <p class="objective">
       🎯 <strong>Objective:</strong> Navigate the first-person maze and reach the
-      glowing <strong>gold exit</strong> using as few steps as possible.
+      glowing <strong>gold exit</strong> using as few steps as possible — before
+      the <strong>👹 monster</strong> hunting you catches up!
     </p>
 
     <div class="layout">
@@ -78,8 +79,11 @@
           <li><strong>▲ / ↑ / W</strong> — step forward one cell.</li>
           <li><strong>▼ / ↓ / S</strong> — step backward one cell.</li>
           <li><strong>⟲ / ← / A</strong> and <strong>⟳ / → / D</strong> — turn 90°.</li>
-          <li>The <strong>minimap</strong> (top-right) reveals where you've been.</li>
+          <li>The <strong>minimap</strong> (top-right) reveals where you've been;
+            the <strong style="color:#ff4d5e">red dot</strong> is the monster.</li>
           <li>Head for the <strong>gold</strong> walls — that's the exit.</li>
+          <li>Avoid the <strong>👹 monster</strong> — it hunts you through the maze.
+            If it reaches you, it's game over.</li>
           <li>Every maze is <strong>randomly generated and always solvable</strong>.</li>
           <li>Match the <strong>Shortest</strong> step count for a ✨ perfect escape.</li>
         </ul>
@@ -118,6 +122,7 @@
         <div><div class="v" id="winTime">00:00</div><div class="k">Time</div></div>
       </div>
       <p id="winVerdict"></p>
+      <p id="caughtNote" class="empty-note" style="display:none;">👹 Caught by the monster — not saved to the leaderboard. Try again!</p>
       <div class="name-row" id="nameRow">
         <input type="text" id="playerName" maxlength="24" placeholder="Enter your name for the leaderboard" />
       </div>

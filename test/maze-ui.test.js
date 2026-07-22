@@ -44,6 +44,11 @@ const D = window.MazeDebug;
 function dirBetween(a, b) {
   return M.DIRVEC.findIndex(([vx, vy]) => vx === b.x - a.x && vy === b.y - a.y);
 }
+function setDifficulty(v) {
+  const sel = document.getElementById('difficulty');
+  sel.value = v;
+  sel.dispatchEvent(new window.Event('change', { bubbles: true }));
+}
 
 console.log('3D Maze through the UI\n');
 
@@ -56,7 +61,9 @@ check('ArrowRight (keyboard) turns the player', afterRight === (before + 1) % 4)
 D.turnLeft();
 check('turning left reverses the facing', D.state().facing === before);
 
-// --- Solve the maze by walking the shortest path. ---
+// --- Solve the maze by walking the shortest path (monster disabled so the
+//     deterministic walk isn't interrupted; the monster is tested separately). ---
+D.setMonsterEnabled(false);
 const maze = D.maze();
 const optimal = D.state().optimal;
 check('displayed shortest matches the solver',
@@ -108,6 +115,42 @@ if (blockedDir >= 0) {
 } else {
   check('cannot move through a wall (step rejected)', true); // no wall adjacent to test
 }
+
+// --- Monster: chases the player and ends the game on contact. ---
+console.log('\nMonster');
+const savedRows = JSON.parse(window.localStorage.getItem('maze.leaderboard.v1') || '[]').length;
+
+D.setMonsterEnabled(true);
+setDifficulty('easy'); // regenerate with a monster present
+const mMaze = D.maze();
+let ms = D.state();
+check('a monster spawned', ms.monster !== null);
+check('monster does not start on the player',
+  !(ms.monster.x === ms.player.x && ms.monster.y === ms.player.y));
+
+const distTo = (a, b) => M.shortestPath(mMaze, a, b).length - 1;
+const dBefore = distTo(ms.monster, ms.player);
+D.monsterStep();
+const dAfter = distTo(D.state().monster, ms.player);
+check('monster steps one cell closer to the player', dAfter === dBefore - 1);
+
+// Force a catch: drop the monster onto an open neighbour, then let it step in.
+const pc = D.state().player;
+let nbr = null;
+for (let d = 0; d < 4; d++) {
+  if (M.canMove(mMaze, pc.x, pc.y, d)) { nbr = { x: pc.x + M.DIRVEC[d][0], y: pc.y + M.DIRVEC[d][1] }; break; }
+}
+check('player has an open neighbour to test a catch', nbr !== null);
+D.setMonster(nbr.x, nbr.y);
+D.monsterStep();
+const caughtState = D.state();
+check('monster catches the player (game over)', caughtState.caught === true);
+check('caught state is shown with the "Caught!" title',
+  document.getElementById('winTitle').textContent.includes('Caught') &&
+  document.getElementById('overlay').classList.contains('show'));
+check('caught run is NOT saved to the leaderboard',
+  document.getElementById('saveScore').style.display === 'none' &&
+  JSON.parse(window.localStorage.getItem('maze.leaderboard.v1') || '[]').length === savedRows);
 
 console.log(`\nResult: ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

@@ -58,12 +58,16 @@ orthogonal neighbours (up/down/left/right).
 
 Escape a **first-person maze**, rendered in real 3D on a plain `<canvas>` with a
 hand-written **raycasting** engine (no libraries). Head for the glowing gold
-exit in the fewest steps.
+exit in the fewest steps — while a **👹 monster hunts you through the maze**.
 
 **Features**
 
 - **First-person 3D view** via raycasting, with a **fog-of-war minimap** that
-  reveals where you've explored.
+  reveals where you've explored (the monster shows as a red dot).
+- **A hunting monster** that chases you along the shortest path (rendered as a
+  distance-shaded billboard sprite, correctly occluded by walls via a Z-buffer).
+  Reach the exit before it catches you — getting caught ends the run and is not
+  saved to the leaderboard. Monster speed scales with difficulty.
 - Move with **arrow keys / WASD** or on-screen **D-pad** buttons (touch-friendly).
   Turning is free; only forward/back steps count.
 - **Randomly generated, always-solvable** mazes (a perfect maze built with a
@@ -103,7 +107,8 @@ test/ui.test.js            # Hanoi UI test (jsdom)
 test/lights-out.test.js    # Lights Out solver test (incl. the 15-move result)
 test/lights-out-ui.test.js # Lights Out UI test (jsdom): solves via clicks
 test/maze.test.js          # Maze generation/pathfinding test (always solvable)
-test/maze-ui.test.js       # Maze UI test (jsdom): solves the maze via movement
+test/maze-ui.test.js       # Maze UI test (jsdom): solves the maze + monster chase
+test/maze-render.test.js   # Maze render smoke test (mock canvas: raycaster+sprite)
 ```
 
 The game logic lives in `js/game-core.js` with **no DOM dependencies**, so the
